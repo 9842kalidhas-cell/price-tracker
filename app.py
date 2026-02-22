@@ -86,31 +86,29 @@ Link: {url}
 
 # ------------------- AMAZON SCRAPER -------------------
 
+import requests
+from bs4 import BeautifulSoup
+
 def get_amazon_price(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept-Language": "en-US,en;q=0.9"
+        "User-Agent": "Mozilla/5.0"
     }
 
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.content, "html.parser")
 
-    if response.status_code != 200:
-        return "Error", 0
+        title = soup.find("span", {"id": "productTitle"})
+        price = soup.find("span", {"class": "a-offscreen"})
 
-    soup = BeautifulSoup(response.content, "html.parser")
+        if title and price:
+            return title.text.strip(), price.text.strip()
+        else:
+            return "Product not found", "N/A"
 
-    title_tag = soup.find(id="productTitle")
-    title = title_tag.get_text().strip() if title_tag else "Title not found"
-
-    price = 0
-
-    whole = soup.find("span", class_="a-price-whole")
-    fraction = soup.find("span", class_="a-price-fraction")
-
-    if whole and fraction:
-        price = whole.get_text().replace(",", "") + fraction.get_text()
-
-    return title, float(price) if price else 0
+    except Exception as e:
+        print("Error:", e)
+        return "Error", "N/A"
 
 # ------------------- ROUTES -------------------
 
