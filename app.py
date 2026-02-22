@@ -86,16 +86,19 @@ Link: {url}
 
 # ------------------- AMAZON SCRAPER -------------------
 
-import requests
 from bs4 import BeautifulSoup
+import requests
 
 def get_amazon_price(url):
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9"
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=8)
+        response.raise_for_status()  # Raise error if status is not 200
+
         soup = BeautifulSoup(response.content, "html.parser")
 
         title = soup.find("span", {"id": "productTitle"})
@@ -105,6 +108,13 @@ def get_amazon_price(url):
             return title.text.strip(), price.text.strip()
         else:
             return "Product not found", "N/A"
+
+    except requests.exceptions.Timeout:
+        return "Request Timeout", "N/A"
+
+    except requests.exceptions.RequestException as e:
+        print("Request Error:", e)
+        return "Request Failed", "N/A"
 
     except Exception as e:
         print("Error:", e)
