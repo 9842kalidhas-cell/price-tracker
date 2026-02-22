@@ -123,10 +123,13 @@ def index():
 
         title, price = get_amazon_price(url)
 
-        if isinstance(price, str):
-            price = float(price.replace(",", "").replace("₹", "").strip())
-        else:
-            price = float(price)
+        try:
+            if isinstance(price, str):
+                price = float(price.replace("₹", "").replace(",", "").strip())
+            else:
+                price = float(price)
+        except:
+            price = 0.0
 
         if price <= target_price:
             send_email(current_user.email, title, price, url)
@@ -135,6 +138,8 @@ def index():
             message = f"Current price is ₹{price}. Waiting for price drop."
 
     return render_template("index.html", message=message)
+
+    
 
 # ------------------- REGISTER -------------------
 
