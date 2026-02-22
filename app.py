@@ -27,7 +27,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
+def create_tables():
     conn = get_db_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -169,18 +169,26 @@ def login():
 
         conn = get_db_connection()
         user = conn.execute(
-            "SELECT * FROM users WHERE username = ? AND password = ?",
-            (username, password)
+            "SELECT * FROM users WHERE username = ?",
+            (username,)
         ).fetchone()
         conn.close()
 
         if user:
-            user_obj = User(user["id"], user["username"], user["email"], user["password"])
-            login_user(user_obj)
-            return redirect(url_for("index"))
+            if user["password"] == password:   # check password separately
+                user_obj = User(
+                    user["id"],
+                    user["username"],
+                    user["email"],
+                    user["password"]
+                )
+                login_user(user_obj)
+                return redirect(url_for("index"))
+
+        return "Invalid username or password"
 
     return render_template("login.html")
-
+ 
 # ------------------- LOGOUT -------------------
 
 @app.route("/logout")
@@ -192,5 +200,5 @@ def logout():
 # ------------------- RUN -------------------
 
 if __name__ == "__main__":
-    init_db()
+    create_tables()
     app.run(debug=True)
