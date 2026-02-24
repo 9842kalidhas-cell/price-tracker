@@ -4,6 +4,9 @@ import sqlite3
 import requests
 from bs4 import BeautifulSoup
 import yagmail
+import random
+import string
+
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key_here"
@@ -27,7 +30,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def create_tables():
+def init_db():
     conn = get_db_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -39,7 +42,7 @@ def create_tables():
     """)
     conn.commit()
     conn.close()
-    create_tables()
+
 # ------------------- USER CLASS -------------------
 
 class User(UserMixin):
@@ -86,39 +89,31 @@ Link: {url}
 
 # ------------------- AMAZON SCRAPER -------------------
 
-from bs4 import BeautifulSoup
-import requests
-
 def get_amazon_price(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept-Language": "en-US,en;q=0.9"
     }
 
-    try:
-        response = requests.get(url, headers=headers, timeout=8)
-        response.raise_for_status()  # Raise error if status is not 200
+    response = requests.get(url, headers=headers)
 
-        soup = BeautifulSoup(response.content, "html.parser")
+    if response.status_code != 200:
+        return "Error", 0
 
-        title = soup.find("span", {"id": "productTitle"})
-        price = soup.find("span", {"class": "a-offscreen"})
+    soup = BeautifulSoup(response.content, "html.parser")
 
-        if title and price:
-            return title.text.strip(), price.text.strip()
-        else:
-            return "Product not found", "N/A"
+    title_tag = soup.find(id="productTitle")
+    title = title_tag.get_text().strip() if title_tag else "Title not found"
 
-    except requests.exceptions.Timeout:
-        return "Request Timeout", "N/A"
+    price = 0
 
-    except requests.exceptions.RequestException as e:
-        print("Request Error:", e)
-        return "Request Failed", "N/A"
+    whole = soup.find("span", class_="a-price-whole")
+    fraction = soup.find("span", class_="a-price-fraction")
 
-    except Exception as e:
-        print("Error:", e)
-        return "Error", "N/A"
+    if whole and fraction:
+        price = whole.get_text().replace(",", "") + fraction.get_text()
+
+    return title, float(price) if price else 0
 
 # ------------------- ROUTES -------------------
 
@@ -133,13 +128,10 @@ def index():
 
         title, price = get_amazon_price(url)
 
-        try:
-            if isinstance(price, str):
-                price = float(price.replace("₹", "").replace(",", "").strip())
-            else:
-                price = float(price)
-        except:
-            price = 0.0
+        if isinstance(price, str):
+            price = float(price.replace(",", "").replace("₹", "").strip())
+        else:
+            price = float(price)
 
         if price <= target_price:
             send_email(current_user.email, title, price, url)
@@ -148,8 +140,6 @@ def index():
             message = f"Current price is ₹{price}. Waiting for price drop."
 
     return render_template("index.html", message=message)
-
-    
 
 # ------------------- REGISTER -------------------
 
@@ -201,6 +191,41 @@ def login():
         return "Invalid username or password"
 
     return render_template("login.html")
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email']
+
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM users WHERE email=?", (email,))
+        user = cursor.fetchone()
+
+        if user:
+            # Generate temporary password
+            temp_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+
+            # Update password
+            cursor.execute("UPDATE users SET password=? WHERE email=?", (temp_password, email))
+            conn.commit()
+
+            # Send email
+            yagmail.send(
+                to=email,
+                subject="Password Reset",
+                contents=f"Your new password is: {temp_password}"
+            )
+
+            message = "New password sent to your email!"
+        else:
+            message = "Email not found!"
+
+        conn.close()
+        return render_template("forgot_password.html", message=message)
+
+    return render_template("forgot_password.html")
  
 # ------------------- LOGOUT -------------------
 
@@ -212,8 +237,6 @@ def logout():
 
 # ------------------- RUN -------------------
 
-import os
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    init_db()
+    app.run(debug=True)
